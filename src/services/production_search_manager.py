@@ -14,6 +14,7 @@ from urllib.parse import quote_plus
 from bs4 import BeautifulSoup
 import json
 import random
+from services.exa_client import exa_client
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,16 @@ class ProductionSearchManager:
     def __init__(self):
         """Inicializa o gerenciador de busca"""
         self.providers = {
+            'exa': {
+                'enabled': exa_client.is_available(),
+                'priority': 1,  # Prioridade máxima
+                'error_count': 0,
+                'max_errors': 3,
+                'client': exa_client
+            },
             'google': {
                 'enabled': bool(os.getenv('GOOGLE_SEARCH_KEY') and os.getenv('GOOGLE_CSE_ID')),
-                'priority': 1,
+                'priority': 2,
                 'error_count': 0,
                 'max_errors': 3,
                 'api_key': os.getenv('GOOGLE_SEARCH_KEY'),
@@ -34,7 +42,7 @@ class ProductionSearchManager:
             },
             'serper': {
                 'enabled': bool(os.getenv('SERPER_API_KEY')),
-                'priority': 2,
+                'priority': 3,
                 'error_count': 0,
                 'max_errors': 3,
                 'api_key': os.getenv('SERPER_API_KEY'),
@@ -42,14 +50,14 @@ class ProductionSearchManager:
             },
             'bing': {
                 'enabled': True,  # Sempre disponível via scraping
-                'priority': 3,
+                'priority': 4,
                 'error_count': 0,
                 'max_errors': 5,
                 'base_url': 'https://www.bing.com/search'
             },
             'duckduckgo': {
                 'enabled': True,  # Sempre disponível via scraping
-                'priority': 4,
+                'priority': 5,
                 'error_count': 0,
                 'max_errors': 5,
                 'base_url': 'https://html.duckduckgo.com/html/'
@@ -330,6 +338,8 @@ class ProductionSearchManager:
             return False
         
         try:
+            if provider_name == 'exa':
+                return self._search_exa(query, max_results)
             test_query = "teste mercado digital Brasil"
             
             if provider_name == 'google':
@@ -349,5 +359,64 @@ class ProductionSearchManager:
             logger.error(f"❌ Teste do provedor {provider_name} falhou: {e}")
             return False
 
+    def _search_exa(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+        """Busca usando Exa Neural Search"""
+        try:
+            # Melhora query para mercado brasileiro
+            enhanced_query = self._enhance_query_for_brazil(query)
+            
+            # Domínios brasileiros preferenciais
+            include_domains = [
+                "g1.globo.com", "exame.com", "valor.globo.com", "estadao.com.br",
+                "folha.uol.com.br", "canaltech.com.br", "infomoney.com.br"
+            ]
+            
+            exa_response = exa_client.search(
+                query=enhanced_query,
+                num_results=max_results,
+                include_domains=include_domains,
+                start_published_date="2023-01-01",
+                use_autoprompt=True,
+                type="neural"
+            )
+            
+            if not exa_response or 'results' not in exa_response:
+                raise Exception("Exa não retornou resultados válidos")
+            
+            results = []
+            for item in exa_response['results']:
+                results.append({
+                    'title': item.get('title', ''),
+                    'url': item.get('url', ''),
+                    'snippet': item.get('text', '')[:300],
+                    'source': 'exa',
+                    'score': item.get('score', 0),
+                    'published_date': item.get('publishedDate', ''),
+                    'exa_id': item.get('id', '')
+                })
+            
+            logger.info(f"✅ Exa Neural Search: {len(results)} resultados")
+            return results
+            
+        except Exception as e:
+            if "quota" in str(e).lower() or "limit" in str(e).lower():
+                logger.warning(f"⚠️ Exa atingiu limite: {str(e)}")
+            raise e
+    
+    def _enhance_query_for_brazil(self, query: str) -> str:
+        """Melhora query para pesquisa no Brasil"""
+        enhanced_query = query
+        query_lower = query.lower()
+        
+        # Adiciona termos brasileiros se não estiverem presentes
+        if not any(term in query_lower for term in ["brasil", "brasileiro", "br"]):
+            enhanced_query += " Brasil"
+        
+        # Adiciona ano atual se não estiver presente
+        if not any(year in query for year in ["2024", "2025"]):
+            enhanced_query += " 2024"
+        
+        return enhanced_query.strip()
+    
 # Instância global
 production_search_manager = ProductionSearchManager()

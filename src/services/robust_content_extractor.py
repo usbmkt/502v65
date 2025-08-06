@@ -56,6 +56,12 @@ try:
 except ImportError:
     HAS_PDFPLUMBER = False
 
+try:
+    import fitz  # PyMuPDF
+    HAS_PYMUPDF = True
+except ImportError:
+    HAS_PYMUPDF = False
+
 from services.url_resolver import url_resolver
 
 logger = logging.getLogger(__name__)
@@ -86,6 +92,7 @@ class RobustContentExtractor:
             'beautifulsoup': {'success': 0, 'failed': 0, 'total_time': 0, 'usage_count': 0, 'available': HAS_BEAUTIFULSOUP},
             'pdf_pypdf2': {'success': 0, 'failed': 0, 'total_time': 0, 'usage_count': 0, 'available': HAS_PYPDF2},
             'pdf_pdfplumber': {'success': 0, 'failed': 0, 'total_time': 0, 'usage_count': 0, 'available': HAS_PDFPLUMBER},
+            'pdf_pymupdf': {'success': 0, 'failed': 0, 'total_time': 0, 'usage_count': 0, 'available': HAS_PYMUPDF},
             'global': {
                 'total_extractions': 0,
                 'total_successes': 0,
@@ -283,6 +290,16 @@ class RobustContentExtractor:
                     else:
                         self.stats['pdf_pdfplumber']['failed'] += 1
                 
+                # Tenta PyMuPDF se disponível
+                if HAS_PYMUPDF:
+                    content = self._extract_pdf_with_pymupdf(temp_path)
+                    if content and len(content) > 100:
+                        self.stats['pdf_pymupdf']['success'] += 1
+                        logger.info(f"✅ PDF extraído com PyMuPDF: {len(content)} caracteres")
+                        return content
+                    else:
+                        self.stats['pdf_pymupdf']['failed'] += 1
+                
                 # Fallback para PyPDF2
                 if HAS_PYPDF2:
                     content = self._extract_pdf_with_pypdf2(temp_path)
@@ -342,6 +359,27 @@ class RobustContentExtractor:
             
         except Exception as e:
             logger.error(f"Erro PyPDF2: {e}")
+            return None
+    
+    def _extract_pdf_with_pymupdf(self, pdf_path: str) -> Optional[str]:
+        """Extrai texto usando PyMuPDF"""
+        try:
+            import fitz
+            
+            doc = fitz.open(pdf_path)
+            text = ""
+            
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                page_text = page.get_text()
+                if page_text:
+                    text += page_text + "\n"
+            
+            doc.close()
+            return self._clean_content(text) if text else None
+            
+        except Exception as e:
+            logger.error(f"Erro PyMuPDF: {e}")
             return None
     
     def _is_dynamic_page(self, html: str) -> bool:

@@ -89,3 +89,6 @@ supabase
 trafilatura
 urllib3
 Werkzeug
+PyMuPDF==1.23.26
+exa-py==1.0.9
+chardet==5.2.0

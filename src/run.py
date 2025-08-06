@@ -46,6 +46,7 @@ def create_app():
     # Registra blueprints
     from routes.analysis import analysis_bp
     from routes.enhanced_analysis import enhanced_analysis_bp
+    from routes.unified_analysis import unified_bp
     from routes.progress import progress_bp
     from routes.user import user_bp
     from routes.files import files_bp
@@ -55,6 +56,7 @@ def create_app():
     
     app.register_blueprint(analysis_bp, url_prefix='/api')
     app.register_blueprint(enhanced_analysis_bp, url_prefix='/api')
+    app.register_blueprint(unified_bp, url_prefix='/api/unified')
     app.register_blueprint(progress_bp, url_prefix='/api')
     app.register_blueprint(user_bp, url_prefix='/api')
     app.register_blueprint(files_bp, url_prefix='/api')
@@ -64,18 +66,23 @@ def create_app():
     
     @app.route('/')
     def index():
-        """Página principal"""
-        return render_template('enhanced_index.html')
+        """Página principal unificada"""
+        return render_template('unified_interface.html')
     
     @app.route('/archaeological')
     def archaeological():
-        """Interface arqueológica"""
-        return render_template('enhanced_interface.html')
+        """Interface arqueológica (redirecionamento)"""
+        return render_template('unified_interface.html')
     
     @app.route('/forensic')
     def forensic():
-        """Interface forense"""
-        return render_template('forensic_interface.html')
+        """Interface forense (redirecionamento)"""
+        return render_template('unified_interface.html')
+    
+    @app.route('/unified')
+    def unified():
+        """Interface unificada"""
+        return render_template('unified_interface.html')
     
     @app.route('/api/app_status')
     def app_status():
